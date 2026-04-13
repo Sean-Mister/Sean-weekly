@@ -1531,6 +1531,24 @@ select {
   color: #334155;
 }
 
+#detail-summary-content .detail-summary-title-text,
+#detail-summary-content .detail-summary-body-text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #334155;
+}
+
+#detail-summary-content .detail-summary-body-text {
+  font-size: 14px;
+  font-weight: 400;
+  color: #64748b;
+}
+
 .detail-summary-section .summary-error-text {
   margin-top: 10px;
   padding: 10px 12px;

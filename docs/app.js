@@ -59,11 +59,11 @@ function getCurrentIssueId() {
 }
 
 const SCORE_RULES = [
-  { key: "industry", label: "产业性", max: 20 },
-  { key: "authority", label: "信源权威性", max: 20 },
-  { key: "impact", label: "产业影响力", max: 30 },
-  { key: "novelty", label: "新颖性与稀缺性", max: 20 },
-  { key: "verifiability", label: "数据与可验证性", max: 10 }
+  { key: "industry", label: "素材完整度与产业相关性", max: 20 },
+  { key: "authority", label: "来源规范与可信度", max: 20 },
+  { key: "impact", label: "事实密度与产业意义", max: 30 },
+  { key: "novelty", label: "条型匹配度", max: 20 },
+  { key: "verifiability", label: "可入版性与语言克制", max: 10 }
 ];
 
 /** 与 sasac-weekly-screener/SKILL.md 第六步栏目一致（产业筛选、初判、大模型输出均对齐） */
@@ -97,12 +97,19 @@ const INDUSTRY_KEYWORDS = {
   其他: [],
 };
 
-const HIGH_VALUE_PATTERNS = {
-  "政策法规与制度发布候选": ["部署", "印发", "出台", "规范", "通知", "方案", "意见", "管理办法", "行政令"],
-  "风险预警与规范提醒候选": ["风险", "预警", "漏洞", "安全提示", "应急", "通报", "风险提示"],
-  "重大技术突破候选": ["突破", "首台套", "首个", "首次", "量产", "成功交付"],
-  "重大投资合作候选": ["融资", "并购", "签约", "投资", "合作", "项目落地"],
-  "产业数据披露候选": ["同比", "环比", "装机", "交付", "出货", "融资额", "成本下降"]
+const CANDIDATE_TYPE_PATTERNS = {
+  "领导活动与工作部署类": ["总书记", "国务院", "国资委", "会议强调", "部署", "工作部署", "专题会议"],
+  "政策法规与制度发布类": ["印发", "出台", "发布", "通知", "意见", "管理办法", "制度", "细则"],
+  "风险预警与规范提醒类": ["风险", "预警", "通报", "漏洞", "安全提示", "风险提示", "应急提醒"],
+  "国际博弈与外部规则施压类": ["制裁", "出口管制", "实体清单", "关税", "禁令", "施压"],
+  "国际趋势与竞争变量变化类": ["国际", "全球", "欧盟", "美国", "日本", "韩国", "趋势", "竞争变量"],
+  "投资合作与资本运作类": ["融资", "并购", "投资", "收购", "签约", "合作", "上市", "重组"],
+  "产品发布与平台上线类": ["发布", "推出", "上线", "平台", "系统", "产品", "模型"],
+  "标志性成果与首台套突破类": ["首台套", "首个", "首次", "突破", "填补空白", "量产"],
+  "性能突破与数据披露类": ["同比", "环比", "增长", "下降", "装机", "出货", "交付", "数据披露"],
+  "医药研发进展子类": ["临床", "获批", "适应症", "药物", "新药", "药审"],
+  "负面调整与合作终止子类": ["终止", "暂停", "撤回", "下调", "裁员", "减产", "合作终止"],
+  "讲话提炼型工作部署子类": ["讲话", "指出", "强调", "提出", "工作要求", "部署要求"]
 };
 
 const AUTHORITY_SCORES = {
@@ -506,6 +513,26 @@ function normalizeText(input) {
   return (input || "").trim().toLowerCase();
 }
 
+function sourceMatchesFilter(article, sourceFilter) {
+  const v = String(sourceFilter || "all");
+  if (v === "all") {
+    return true;
+  }
+  const t = String(article.sourceType || "").trim();
+  const groupMap = {
+    "source-government": new Set(["government"]),
+    "source-association": new Set(["association"]),
+    "source-enterprise": new Set(["enterprise"]),
+    "source-mainstream-media": new Set(["official_media", "industry_media"]),
+    "source-thinktank": new Set(["thinktank"]),
+    "source-self-media": new Set(["self_media"]),
+  };
+  if (groupMap[v]) {
+    return groupMap[v].has(t);
+  }
+  return t === v;
+}
+
 function containsAny(text, keywords) {
   return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
 }
@@ -549,9 +576,9 @@ function detectIndustry(text) {
 }
 
 function detectCandidateType(text) {
-  let found = "一般产业动态候选";
+  let found = "产业动态（一般）";
 
-  Object.entries(HIGH_VALUE_PATTERNS).some(([label, keywords]) => {
+  Object.entries(CANDIDATE_TYPE_PATTERNS).some(([label, keywords]) => {
     if (containsAny(text, keywords)) {
       found = label;
       return true;
@@ -596,61 +623,64 @@ function analyzeScores(article) {
   const highValueHit = HIGH_VALUE_TITLE_HINTS.filter((word) => mergedText.includes(word.toLowerCase()));
   const noiseHit = containsAny(mergedText, ["体验", "上手", "开箱", "推荐", "真香", "必买", "测评", "评测"]);
   const propagandaHit = containsAny(mergedText, ["隆重", "重磅", "震撼", "全面领先", "彻底改变", "极致"]);
+  const absoluteHit = containsAny(mergedText, ["完全", "绝对", "彻底", "唯一", "必然"]);
+  const hasSourceName = Boolean(String(article.sourceName || "").trim());
+  const hasPublishDate = Boolean(String(article.publishDate || "").trim());
+  const hasActionVerb = containsAny(mergedText, ["发布", "出台", "部署", "提示", "投资", "签约", "突破", "增长", "下降", "通报", "上线"]);
+  const hasCoreFact = String(article.body || "").trim().length >= 80;
 
-  let industryScore = 0;
+  const completenessCount = [hasSourceName, hasPublishDate, hasActionVerb, hasCoreFact].filter(Boolean).length;
+
+  let industryScore = 4 + completenessCount * 3;
   if (industryResult.score >= 2) {
-    industryScore = 18;
+    industryScore += 4;
   } else if (industryResult.score === 1) {
-    industryScore = 10;
-  } else {
-    industryScore = 2;
+    industryScore += 2;
   }
-  if (containsAny(mergedText, ["自主可控", "国产替代", "政策联动", "产业链", "上下游", "安全"])) {
-    industryScore = Math.min(20, industryScore + 2);
-  }
+  industryScore = Math.min(20, industryScore);
 
   let authorityScore = AUTHORITY_SCORES[article.sourceType] || 0;
   if (["新华社", "中国政府网", "国家互联网应急中心"].includes(article.sourceName)) {
     authorityScore = 20;
   }
 
-  let impactScore = 6;
+  let impactScore = 8;
+  if (hasNumbers) {
+    impactScore += 6;
+  }
   if (highValueHit.length >= 2) {
-    impactScore += 12;
-  } else if (highValueHit.length === 1) {
-    impactScore += 7;
-  }
-  if (containsAny(mergedText, ["多部门", "六部门", "联动", "头部企业", "资本", "市场秩序", "退出", "关键场景"])) {
-    impactScore += 10;
-  }
-  if (containsAny(mergedText, ["首台套", "最大", "拐点", "突破性"])) {
     impactScore += 8;
+  } else if (highValueHit.length === 1) {
+    impactScore += 4;
+  }
+  if (containsAny(mergedText, ["产业链", "供应链", "治理", "政策导向", "竞争格局", "安全"])) {
+    impactScore += 8;
+  }
+  if (containsAny(mergedText, ["首台套", "首次", "替代", "关键能力"])) {
+    impactScore += 5;
   }
   impactScore = Math.min(30, impactScore);
 
-  let noveltyScore = 4;
-  if (containsAny(mergedText, ["首次", "首个", "新", "突破", "首次披露"])) {
-    noveltyScore += 8;
-  }
-  if (containsAny(mergedText, ["填补空白", "关键数据", "解决行业痛点", "引领"])) {
-    noveltyScore += 6;
-  }
-  if (candidateType !== "一般产业动态候选") {
+  let noveltyScore = candidateType === "产业动态（一般）" ? 8 : 15;
+  if (containsAny(mergedText, ["国家能力", "主权云", "算力", "量子", "底层能力"])) {
     noveltyScore += 3;
+  }
+  if (containsAny(mergedText, ["讲话", "强调", "工作要求"]) && candidateType.includes("子类")) {
+    noveltyScore += 1;
   }
   noveltyScore = Math.min(20, noveltyScore);
 
-  let verifiabilityScore = 2;
+  let verifiabilityScore = 8;
   if (hasNumbers) {
-    verifiabilityScore += 4;
+    verifiabilityScore += 1;
   }
-  if (hasSourceLink) {
-    verifiabilityScore += 2;
+  if (!hasSourceLink && !STRONG_AUTHORITY_TYPES.has(article.sourceType)) {
+    verifiabilityScore -= 2;
   }
-  if (containsAny(mergedText, ["通知", "通报", "发布", "指出", "明确", "提出"])) {
-    verifiabilityScore += 2;
+  if (noiseHit || propagandaHit || absoluteHit) {
+    verifiabilityScore -= 3;
   }
-  verifiabilityScore = Math.min(10, verifiabilityScore);
+  verifiabilityScore = Math.max(0, Math.min(10, verifiabilityScore));
 
   const scoreMap = {
     industry: {
@@ -667,7 +697,7 @@ function analyzeScores(article) {
     },
     novelty: {
       value: noveltyScore,
-      reason: candidateType !== "一般产业动态候选" ? `识别为 ${candidateType}，具备一定新颖性。` : "更接近一般资讯，稀缺性信号有限。"
+      reason: candidateType !== "产业动态（一般）" ? `识别为 ${candidateType}，条型匹配较清晰。` : "更接近一般动态，条型辨识度一般。"
     },
     verifiability: {
       value: verifiabilityScore,
@@ -677,9 +707,9 @@ function analyzeScores(article) {
 
   const hardChecks = [
     {
-      label: "非权威信源",
-      pass: STRONG_AUTHORITY_TYPES.has(article.sourceType),
-      reason: STRONG_AUTHORITY_TYPES.has(article.sourceType) ? "信源类型满足基础可信门槛。" : "当前信源属于低可信或需交叉验证来源。"
+      label: "素材要素完整",
+      pass: completenessCount >= 3,
+      reason: completenessCount >= 3 ? "主体/时间/动作/事实层信息基本齐备。" : "主体、时间、动作、事实层要素不完整。"
     },
     {
       label: "与产业无关",
@@ -687,24 +717,24 @@ function analyzeScores(article) {
       reason: industryResult.score > 0 ? `已识别到 ${industryResult.label} 相关信号。` : "未识别到重点产业关键词。"
     },
     {
-      label: "超出时效",
+      label: "来源可标注",
+      pass: hasSourceName,
+      reason: hasSourceName ? "来源名称可用于正文来源标注。" : "缺少来源名称，无法满足来源写法规范。"
+    },
+    {
+      label: "时效可用",
       pass: !timeliness.stale,
       reason: timeliness.label
     },
     {
-      label: "无实质信息",
-      pass: article.body.length >= 80 && !noiseHit,
-      reason: article.body.length >= 80 && !noiseHit ? "正文具备一定信息密度。" : "正文信息密度不足或偏体验/评测内容。"
+      label: "非宣传腔",
+      pass: !noiseHit && !propagandaHit && !absoluteHit,
+      reason: !noiseHit && !propagandaHit && !absoluteHit ? "语言风格基本可入版。" : "存在评测化、宣传化或绝对化表达。"
     },
     {
-      label: "不可溯源",
+      label: "可追溯",
       pass: Boolean(article.url || STRONG_AUTHORITY_TYPES.has(article.sourceType)),
       reason: article.url ? "有原文链接，可追溯。" : "缺少原文链接，仅依赖信源可信度兜底。"
-    },
-    {
-      label: "违规或明显不实",
-      pass: !containsAny(mergedText, ["谣言", "未经证实", "小道消息", "爆料"]) && !propagandaHit,
-      reason: !containsAny(mergedText, ["谣言", "未经证实", "小道消息", "爆料"]) && !propagandaHit ? "未发现明显违规或夸张失实表述。" : "命中未经证实或明显宣传化表述。"
     }
   ];
 
@@ -712,7 +742,7 @@ function analyzeScores(article) {
   const hardRejected = hardChecks.some((item) => !item.pass);
 
   let decision = "淘汰";
-  if (!hardRejected && totalScore >= 70) {
+  if (!hardRejected && totalScore >= 72) {
     decision = "进入候选池";
   } else if (!hardRejected && totalScore >= 60) {
     decision = "备选，建议人工复核";
@@ -724,8 +754,8 @@ function analyzeScores(article) {
   if (industryResult.score > 0) {
     positives.push(`栏目初判为 ${industryResult.label}。`);
   }
-  if (candidateType !== "一般产业动态候选") {
-    positives.push(`识别到高价值条型：${candidateType}。`);
+  if (candidateType !== "产业动态（一般）") {
+    positives.push(`识别到条型：${candidateType}。`);
   }
   if (authorityScore >= 16) {
     positives.push("信源权威性较强。");
@@ -737,8 +767,8 @@ function analyzeScores(article) {
     positives.push("文章具备明确政策或治理属性。");
   }
 
-  if (noiseHit) {
-    risks.push("内容更接近体验评测或消费级信息，适配度偏弱。");
+  if (noiseHit || propagandaHit || absoluteHit) {
+    risks.push("文本存在宣传腔、评测腔或绝对化表达，需先降噪再入刊。");
   }
   if (!hasSourceLink) {
     risks.push("缺少原文链接，溯源能力不足。");
@@ -1057,7 +1087,7 @@ function applyFilters() {
     if (!articleMatchesIndustryFilter(article, result, industry)) {
       return false;
     }
-    if (source !== "all" && article.sourceType !== source) {
+    if (!sourceMatchesFilter(article, source)) {
       return false;
     }
     if (!scoreMatchesFilter(result.totalScore, scoreTier)) {
@@ -1270,6 +1300,16 @@ function scoreMatchesFilter(totalScore, filterValue) {
   if (v === "all" || v === "0") {
     return true;
   }
+  const nScore = Number(totalScore) || 0;
+  if (v === "decision-candidate") {
+    return nScore >= 72;
+  }
+  if (v === "decision-review") {
+    return nScore >= 60 && nScore <= 71;
+  }
+  if (v === "decision-reject") {
+    return nScore < 60;
+  }
   const tierClass = getScoreTierClass(totalScore);
   const tierMap = {
     "tier-a": "score-tier-a",
@@ -1431,6 +1471,17 @@ function normalizeSummaryWhitespace(text) {
  */
 function parseSkillSummarySections(normalized) {
   const t = normalized;
+  const titleM = t.match(/摘要标题\s*[：:]?\s*([\s\S]*?)(?=\n\s*摘要总结\s*[：:]?|$)/);
+  const summaryM = t.match(/摘要总结\s*[：:]?\s*([\s\S]*)$/);
+  if (titleM || summaryM) {
+    return {
+      title: (titleM ? titleM[1] : "").trim(),
+      summary: (summaryM ? summaryM[1] : "").trim(),
+      event: "",
+      data: "",
+      meaning: "",
+    };
+  }
   if (!/事件摘要[：:]/.test(t) && !/数据亮点[：:]/.test(t) && !/产业意义[：:]/.test(t)) {
     return null;
   }
@@ -1445,6 +1496,19 @@ function parseSkillSummarySections(normalized) {
     return null;
   }
   return { event, data, meaning };
+}
+
+function extractSummaryParts(article) {
+  const normalized = normalizeSummaryWhitespace(String(article.aiSummary || ""));
+  const parsed = parseSkillSummarySections(normalized);
+  if (parsed) {
+    return parsed;
+  }
+  return {
+    event: normalized,
+    data: "",
+    meaning: "",
+  };
 }
 
 function isSkippedHighlightLine(s) {
@@ -1478,9 +1542,27 @@ function renderSummaryAdvice(el, rawText) {
     wrap.appendChild(txt);
     el.appendChild(wrap);
   };
+  const appendPlainLine = (className, body) => {
+    if (!body) {
+      return;
+    }
+    const p = document.createElement("p");
+    p.className = className;
+    p.textContent = body;
+    el.appendChild(p);
+  };
 
   const skill = parseSkillSummarySections(normalized);
   if (skill) {
+    if (skill.title) {
+      appendPlainLine("detail-summary-title-text", `“${String(skill.title).replace(/^["“]|["”]$/g, "")}”`);
+    }
+    if (skill.summary) {
+      appendPlainLine("detail-summary-body-text", skill.summary);
+    }
+    if (el.childNodes.length) {
+      return;
+    }
     if (skill.event) {
       appendSeg("事件摘要", skill.event);
     }
@@ -2078,13 +2160,20 @@ function attachEvents() {
     generateWeeklyBtnEl.disabled = true;
     generateWeeklyBtnEl.textContent = "生成中...";
     try {
+      const issueNumber = getCurrentIssueNumber();
       const payload = {
-        weeklyTitle: "本周精选周刊",
+        weeklyTitle: `产业资讯周刊（第${issueNumber}期）`,
+        issueNumber,
         articles: selected.map((article) => ({
+          sourceName: article.sourceName || "",
+          publishDate: article.publishDate || "",
+          section: normalizeIndustryLabel(state.resultsById[article.id]?.industryGuess || "其他"),
+          candidateType: state.resultsById[article.id]?.candidateType || "",
           title: article.title,
           url: article.url,
           content: article.body,
-          summary: article.aiSummary || "",
+          summary: article.aiSummary || buildCompactSummary(article, state.resultsById[article.id] || analyzeScores(article)),
+          summaryParts: extractSummaryParts(article),
           score: state.resultsById[article.id]?.totalScore || 0
         }))
       };

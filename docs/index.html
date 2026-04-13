@@ -89,25 +89,23 @@
             </label>
             <label>
               <span>信源</span>
-              <select id="source-filter">
+              <select id="source-filter" title="按 SKILL 信源优先级筛选">
                 <option value="all">全部信源类型</option>
-                <option value="official_media">官方媒体</option>
-                <option value="government">政府官网</option>
-                <option value="association">行业协会</option>
-                <option value="enterprise">头部企业官方</option>
-                <option value="thinktank">智库/研究机构</option>
-                <option value="industry_media">行业媒体</option>
-                <option value="self_media">自媒体</option>
+                <option value="source-government">政府官网与官方通报</option>
+                <option value="source-association">行业协会与权威公共机构</option>
+                <option value="source-enterprise">头部企业官方发布</option>
+                <option value="source-mainstream-media">主流财经媒体与核心行业媒体</option>
+                <option value="source-thinktank">券商、智库、研究号</option>
+                <option value="source-self-media">普通自媒体</option>
               </select>
             </label>
             <label>
               <span>评分</span>
-              <select id="score-filter" title="与列表、详情中总分颜色档位一致，点「确定」应用">
+              <select id="score-filter" title="按 SKILL 决策阈值筛选：候选≥72、复核60-71、淘汰<60">
                 <option value="all">全部评分</option>
-                <option value="tier-a">蓝色档 86–100</option>
-                <option value="tier-b">橙色档 56–85</option>
-                <option value="tier-c">黄色档 21–55</option>
-                <option value="tier-d">红色档 0–20</option>
+                <option value="decision-candidate">建议候选 72–100</option>
+                <option value="decision-review">建议复核 60–71</option>
+                <option value="decision-reject">建议淘汰 0–59</option>
               </select>
             </label>
             <label>
@@ -201,7 +199,7 @@
 
               <section class="detail-section detail-summary-section detail-summary-primary">
                 <div class="detail-summary-head">
-                  <h4 class="detail-summary-heading">文章摘要</h4>
+                  <h4 class="detail-summary-heading">AI摘要</h4>
                 </div>
                 <div id="detail-summary-content" class="detail-summary-content detail-body-full">
                   <div id="summary-loading" class="summary-loading-block" aria-live="polite">
