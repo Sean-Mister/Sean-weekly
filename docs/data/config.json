@@ -1,0 +1,7 @@
+{
+  "ok": true,
+  "wechatRssConfigured": false,
+  "wechatRssFeedCount": 0,
+  "wechatDownloadApiRepo": "https://github.com/tmwgsicp/wechat-download-api",
+  "wechatRssSaaS": "https://wechatrss.waytomaster.com"
+}

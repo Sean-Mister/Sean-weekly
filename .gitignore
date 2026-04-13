@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+server/node_modules/
+**/node_modules/
+
+weixin_crawler/project/.venv/
+**/__pycache__/
+*.pyc
+.Python
+
+*.log
+.idea/

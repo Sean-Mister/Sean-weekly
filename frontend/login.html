@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 产业情报周刊系统</title>
+  <link rel="stylesheet" href="./styles.css?v=20260412c">
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <div class="login-brand">
+      <div class="brand-mark">V1</div>
+      <div>
+        <h1 class="login-brand-title">产业情报周刊系统</h1>
+        <p class="login-brand-sub subtle">请登录后使用工作台</p>
+      </div>
+    </div>
+
+    <div class="login-card panel">
+      <h2 class="login-card-title">账号登录</h2>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <label class="login-field">
+          <span>账号</span>
+          <input
+            id="login-user"
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            placeholder="请输入账号"
+          >
+        </label>
+        <label class="login-field">
+          <span>密码</span>
+          <input
+            id="login-pass"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            placeholder="请输入密码"
+          >
+        </label>
+        <p id="login-error" class="login-error hidden" role="alert"></p>
+        <button type="submit" class="primary-btn login-submit">登录</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="./auth.js?v=20260412c"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get("clearCache") === "1" && window.WEEKLY_AUTH && typeof WEEKLY_AUTH.clearAppCache === "function") {
+        WEEKLY_AUTH.clearAppCache();
+        params.delete("clearCache");
+        var rest = params.toString();
+        history.replaceState(null, "", window.location.pathname + (rest ? "?" + rest : "") + window.location.hash);
+      }
+      if (window.WEEKLY_AUTH && WEEKLY_AUTH.isLoggedIn()) {
+        window.location.replace("index.html");
+        return;
+      }
+      const form = document.getElementById("login-form");
+      const errEl = document.getElementById("login-error");
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        errEl.classList.add("hidden");
+        errEl.textContent = "";
+        const fd = new FormData(form);
+        const user = fd.get("username");
+        const pass = fd.get("password");
+        if (WEEKLY_AUTH.validate(user, pass)) {
+          WEEKLY_AUTH.login(WEEKLY_AUTH.DEFAULT_NAME);
+          window.location.href = "index.html";
+        } else {
+          errEl.textContent = "账号或密码错误";
+          errEl.classList.remove("hidden");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

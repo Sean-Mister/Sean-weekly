@@ -1,0 +1,4 @@
+interface:
+  display_name: "Weekly Article Screener"
+  short_description: "Score raw articles for weekly brief candidates"
+  default_prompt: "Use $sasac-weekly-screener to score these raw articles and identify which should enter the weekly candidate pool."
